@@ -11,3 +11,7 @@ class RecordTime(BaseModel):
     task_name: str
     start_time: datetime
     end_time: datetime
+    
+class TaskingNote(BaseModel):
+    task_name:str
+    task_etc:dict
