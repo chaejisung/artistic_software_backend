@@ -15,3 +15,7 @@ class RecordTime(BaseModel):
 class TaskingNote(BaseModel):
     task_name:str
     task_etc:dict
+    
+class UpdateSpace(BaseModel):
+    id: str
+    space: list
