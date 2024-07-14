@@ -3,14 +3,17 @@ dotenv.load_dotenv()
 sys.path.append(os.getenv("BACKEND_PATH"))
 
 from fastapi import FastAPI, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import HTTPException
-from asyncio import create_task, gather
+from asyncio import create_task, gather, Queue
+from typing import Dict
 
 from config.config import settings
-from utils.deps import get_user_coll, get_user_tasking_time_coll, get_user_space_coll
+from utils.deps import get_user_coll, get_user_tasking_time_coll, get_user_space_coll, get_friend_wait_coll
 from api.middleware.session_middleware import SessionCheckMiddleware
+from api.schema.schemas import AddFriendUser
 from utils.mongodb_handler import MongoDBHandler
+from utils.server_sent_event import user_queues
 
 sub_app = FastAPI()
 
@@ -22,166 +25,170 @@ sub_app.add_middleware(SessionCheckMiddleware)
 async def get_mainpage(request:Request, 
                        user_coll:MongoDBHandler=Depends(get_user_coll), 
                        user_space_coll:MongoDBHandler=Depends(get_user_space_coll)):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
+    # 유저 데이터 받아오기
     my_space = create_task(user_space_coll.select({"_id": my_id}, limit=1))
     
-    friends_data_list = []
-    friends_space_list = []
+    # 유저 데이터 바탕으로 친구 데이터 받아오기
+    friend_id = my_data.get("friend_id")
+    if(friend_id is not None):
+        friend_data_list = [create_task(user_coll.select({"_id": id}, limit=1)) for id in friend_id]
+        friend_space_list = [create_task(user_space_coll.select({"_id": id}, limit=1)) for id in friend_id]
     
-    friends_id = my_data.get("friend_id")
-    if(friends_id is not None):
-        friends_data_list = [create_task(user_coll.select({"_id": id}, limit=1)) for id in friends_id]
-        friends_space_list = [create_task(user_space_coll.select({"_id": id}, limit=1)) for id in friends_id]
-    
-        friends_data_list = await gather(*friends_data_list)
-        friends_space_list = await gather(*friends_space_list)
+        friend_data= await gather(*friend_data_list)
+        friend_space = await gather(*friend_space_list)
     
     my_space = await my_space
     
-    user_data = [my_data, *friends_data_list]
-    user_space_data = [*my_space, *friends_space_list]
+    # 응답 설명 메시지 설정
+    if(friend_id is None):
+        response_message = "There is only personal data with no friend data"
+    else:
+        response_message = "Personal and friend data have been transmitted."
     
+    # 유저들의 정보
     response_content = {
+        "message": response_message,
         "data": {
-            "user_data": user_data,
-            "user_space_data": user_space_data
-                 },
-        "length": {
-            "user_data": len(user_data),
-            "user_space_data": len(user_space_data)
-                 },
-    }
-    
-    return JSONResponse(content=response_content)
-
-# 친구 추가 -> 이거 추가하려는 친구가 없으면 rollback해야하는데 그건 나중에
-@sub_app.get(path="/friend/add/{user_id}")
-async def get_mainpage_friend_add(request: Request,
-                                  user_id:str,
-                                  user_coll:MongoDBHandler=Depends(get_user_coll)):
-    my_data = request.state.user
-    my_id = my_data.get("_id")
-    
-    # 내 아이디 == 추가하려는 아이디 or 추가하려는 id가 존재하지 않으면 오류
-    if(my_id == user_id or await user_coll.select({"_id":my_id}, {"_id"}, limit=1) == []):
-        raise HTTPException(status_code=400)
-    # 이미 있으면 끝
-    if(user_id in my_data["friend_id"]):
-        response_content = {
-            "message": "This friend is already added."
+            "user_data": {
+                "my_data": my_data,
+                "friend_data": friend_data
+            },
+            "user_space_data":{
+                "my_space_data": my_space,
+                "friend_space_data": friend_space
+                },
+            "length":{
+                "my_data_len": len(my_data),
+                "my_space_data_len": len(my_space),
+                "friend_data_len": len(friend_data),
+                "friend_space_data_len": len(friend_data)
+            }
         }
-        return JSONResponse(content=response_content)
-    
-    task1 = create_task(user_coll.update({"_id":user_id},{"$pull":{"friend_id":my_id}}))
-    task2 = create_task(user_coll.update({"_id":my_id},{"$pull":{"friend_id":user_id}}))
-    
-    response_content = {
-        "data": [my_id, user_id]
     }
     
-    await gather(task1, task2)
-    
-    return JSONResponse(content=response_content)
-
-# 친구 삭제
-@sub_app.get(path="/friend/delete/{user_id}")
-async def get_friend_delete(request: Request, 
-                            user_id:str,
-                            user_coll:MongoDBHandler=Depends(get_user_coll)):
-    my_data = request.state.user
-    my_id = my_data.get("_id")
-    
-    # 내 아이디 == 삭제하려는 아이디면 오류
-    if(my_id == user_id):
-        raise HTTPException(status_code=400)
-    # 원래 없으면 끝
-    if(user_id not in my_data["friend_id"]):
-        response_content = {
-            "message": "The friend no longer exists."
-        }
-        return JSONResponse(content=response_content)
-    
-    task1 = create_task(user_coll.update({"_id":user_id},{"$push":{"friend_id":my_id}}))
-    task2 = create_task(user_coll.update({"_id":my_id},{"$push":{"friend_id":user_id}}))
-    
-    response_content = {
-        "data": [my_id, user_id]
-    }
-    
-    await gather(task1, task2)
-    
-    return JSONResponse(content=response_content)
+    return JSONResponse(content=response_content, status_code=200)
 
 # 작업 시간 가져오기
-@sub_app.get(path="/taskingtime")
-async def get_mainpage_taskingtime(request:Request, 
+@sub_app.get(path="/focustime")
+async def get_mainpage_focustime(request:Request, 
                                 user_tasking_time_coll:MongoDBHandler=Depends(get_user_tasking_time_coll)):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
+    friend_id = my_data.get("friend_id")
     
-    my_tasking_time = create_task[user_tasking_time_coll.select({"_id":my_id}, {"today_tasking_time"}, 1)]
+    # 사용자 집중 시간 가져오기
+    my_focustime = create_task[user_tasking_time_coll.select({"_id":my_id}, {"today_tasking_time"}, 1)]
     
-    friends_id = my_data["friend_id"]
-    friends_tasking_list = [create_task(user_tasking_time_coll.select({"_id": id}, {"today_tasking_time":1}, 1)) for id in friends_id]
+    if(friend_id is None):
+        response_message = "There is only personal data with no friend data"
+    else:
+        response_message = "Personal and friend data have been transmitted."
+        
+    friend_focus_time_list = [create_task(user_tasking_time_coll.select({"_id": id}, {"today_tasking_time":1}, 1)) for id in friend_id]
     
+    # 응답 데이터 구성
     response_content = {
-        "data": [await my_tasking_time] + await friends_tasking_list,
-        "length": [1, len(await friends_tasking_list)]
+        "message": response_message,
+        "data": {
+            "my_focustime_data": await my_focustime,
+            "friend_focustime_list": await friend_focus_time_list,
+            "length": {
+                "my_focustime_data": len(await my_focustime),
+                "friend_focustime_list": len(await friend_focus_time_list)
+                
+            }
+        }
     }
     
-    return JSONResponse(content=response_content)
+    return JSONResponse(content=response_content, status_code=200)
 
 # 사용자 정보+공간 불러오기 -> 인증 필요
 @sub_app.get(path="/user/{user_id}")
 async def get_mainpage_studytime(request:Request, 
                                  user_id:str,
-                                user_coll:MongoDBHandler=Depends(get_user_coll),
-                                user_space_coll:MongoDBHandler=Depends(get_user_space_coll)):
+                                 user_coll:MongoDBHandler=Depends(get_user_coll),
+                                 user_space_coll:MongoDBHandler=Depends(get_user_space_coll)):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
-    friends_id = my_data.get("friend_id")
+    friend_id = my_data.get("friend_id")
     
-    if(friends_id is not None):
+    # 친구 데이터 존재 시 불러오는 작업
+    if(friend_id is not None):
         friend_data = create_task(user_coll.select({"_id": user_id}, limit=1))
         user_space = create_task(user_space_coll.select({"_id": user_id}, limit=1))
     
-    # 본인 또는 친구가 아닌 경우 오류
-        if(user_id != my_id or user_id not in friends_id):
-            raise HTTPException(status_code=400)
+        # 본인 또는 친구가 아닌 경우 오류
+        if(user_id != my_id or user_id not in friend_id):
+            raise HTTPException(status_code=422)
+        
+        # 본인 데이터거나 친구 데이터일 때 정보 불러오기
         if(user_id == my_id):
             user_data = my_data
         else:
             user_data = await friend_data
     
         user_space_data = await user_space
+        
+        
         response_content = {
+            "message": "Requested Data Successfully Found and Returned",
             "data": {
                 "user_data": user_data,
-                "user_space_data": user_space_data[0]
-                    },
-            "length": {
-                "user_data": len(user_data),
-                "user_space_data": len(user_space_data)
-                    },
+                "user_space_data": user_space_data[0],
+                "length": {
+                    "user_data_len": len(user_data),
+                    "user_space_data_len": len(user_space_data)
+                    }
+                }
         }
     else:
         if(user_id != my_id):
-            raise HTTPException(status_code=400)
+            raise HTTPException(status_code=422)
         else:
             user_data = my_data
             
         response_content = {
+            "message": "Requested Data Successfully Found and Returned",
             "data": {
                 "user_data": user_data,
-                "user_space_data": []
+                "user_space_data": [],
+                "length": {
+                    "user_data_len": len(user_data),
+                    "user_space_data_len": 0
                     },
-            "length": {
-                "user_data": len(user_data),
-                "user_space_data": 0
-                    },
+                },
+            
         }
     
-    return JSONResponse(content=response_content)
+    return JSONResponse(content=response_content, status_code=200)
     
 # 친구 활동 중 확인 -> 이건 어캐하지
+
+
+# 친구 요청, 전체 공지, 메모장 보내는 SSE 엔드포인트
+@sub_app.get("/sse")
+async def get_mainpage_sse(request:Request,
+                           user_queues=user_queues):
+    # 미들웨어에서 넘겨받은 유저 데이터
+    my_data = request.state.user
+    my_id = my_data.get("_id")
+    
+    async def get_events(user_queues = user_queues):
+        while True:
+            queue_data = await user_queues[my_id].get()
+            if(queue_data is None):
+                break
+            yield queue_data
+    
+    async def close_queue():
+        await request.is_disconnected()
+        await user_queues[my_id].put(None)
+        
+    create_task(close_queue())
+    
+    return StreamingResponse(get_events(), media_type="text/event-stream")

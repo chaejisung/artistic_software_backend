@@ -17,15 +17,18 @@ router = APIRouter()
 # 미들웨어 추가
 sub_app.add_middleware(SessionCheckMiddleware)
 
-@sub_app.get()
+# 개인 공간에 필요한 정보 가져오기
+@sub_app.get(path="/")
 async def get_personalspace(request:Request,
                             user_coll:MongoDBHandler=Depends(get_user_coll),
                             user_space_coll:MongoDBHandler=Depends(get_user_space_coll),
                             user_tasking_time_coll:MongoDBHandler=Depends(get_user_tasking_time_coll)
                             ):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
     
+    # 본인 정보, 공간 정보, 집중 시간 정보 불러오기
     filter = {"_id": my_id}
     user_data_task = [
         create_task(user_coll.select(filter, limit=1)),
@@ -34,24 +37,26 @@ async def get_personalspace(request:Request,
     ]
     
     user_data_list = await gather(user_data_task)
-    response_content={
-        "data": {
-            "user_data": user_data_list[0],
-            "user_space_data": user_data_list[1],
-            "user_tasking_time_data": user_data_list[2]
-                 },
-        "length": {
-            "user_data": len(user_data_list[0]),
-            "user_space_data": len(user_data_list[1]),
-            "user_tasking_time_data": len(user_data_list[2])
-        }
-    }
     
-    return JSONResponse(content=response_content)
+    response_content = {
+        "message": "All information has been successfully retrieved",
+        "data": {
+                "user_data": user_data_list[0],
+                "user_space_data": user_data_list[1],
+                "user_focustime_data": user_data_list[2],
+                "length": {
+                    "user_data_len": len(user_data_list[0]),
+                    "user_space_data_len": len(user_data_list[1]),
+                    "user_focustime_data_len": len(user_data_list[2])
+                }
+            },    
+        }   
+    
+    return JSONResponse(content=response_content, status_code=200)
 
 # 개인 공부 시간 기록 → 마칠 때 저장
-@sub_app.post(path="/taskingtime/record")
-async def get_taskingtime_record(request:Request,
+@sub_app.post(path="/focustime/record")
+async def get_focustime_record(request:Request,
                                  record_time:RecordTime,
                                  user_tasking_time_coll:MongoDBHandler=Depends(get_user_tasking_time_coll)):
     my_data = request.state.user
@@ -117,37 +122,7 @@ async def delete_taskingnote_delete(request:Request,
 # async def get_taskingnote(request:Request,
 #                           )
 
-# 이건 세션 인증 필요 없으므로 성능상 이유로 라우터로 분리
-# 꾸미기 요소 카탈로그 보여주기
-@router.get(path="/decor/catalog")
-async def get_decor_catalog(decor_category:list=Depends(get_decor_category),
-                            decor_coll:MongoDBHandler=Depends(get_decor_coll)):
-    
-    task_func = lambda x: decor_coll.select({"decor_category": x})
-    decor_task_list = map(task_func, decor_category)
-    decor_data = await gather(decor_task_list)
-    
-    response_content = {}
-    for i in range(len(decor_category)):
-        response_content.update({decor_category[i]: decor_data[i]})
-        
-    return JSONResponse(content=response_content)
 
-# 공간 꾸민 후 정보 보내기, 아직 user_spcae_coll이 미정이라 update_space 나중에 바꿔야함
-@sub_app.put(path="/decor/space")
-async def put_decor_space(request:Request,
-                        update_space:UpdateSpace,
-                        user_space_coll:MongoDBHandler=Depends(get_user_space_coll)):
-    my_data = request.state.user
-    my_id = my_data.get("_id")
-    
-    update_space_data = update_space.model_dump
-    await user_space_coll.update({"_id": my_id}, {'$set': update_space_data})
-    
-    response_content = {
-        "message": "Space Update Success"
-    }
-    return JSONResponse(content=response_content)
     
 
     

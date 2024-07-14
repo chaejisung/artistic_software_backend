@@ -19,3 +19,10 @@ class TaskingNote(BaseModel):
 class UpdateSpace(BaseModel):
     id: str
     space: list
+    
+class AddFriendUser(BaseModel):
+    id: str
+    
+class ResponseFriendReq(BaseModel):
+    user_id: str
+    accept_status: bool

@@ -20,5 +20,8 @@ def get_decor_coll() -> MongoDBHandler:
 def get_session_coll() -> MongoDBHandler:
     return MongoDBHandler(coll_config={"coll_name": "session_coll"})
 
+def get_friend_wait_coll() -> MongoDBHandler:
+    return MongoDBHandler(coll_config={"coll_name": "friend_wait_coll"})
+
 def get_decor_category()->list:
     return ['desk', 'lamp', 'monitor', 'vase', 'bookshelf', 'frame'] # 현재는 이정도
