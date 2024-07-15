@@ -53,18 +53,18 @@ async def get_mainpage(request:Request,
         "message": response_message,
         "data": {
             "user_data": {
-                "my_data": my_data,
-                "friend_data": friend_data
+                "my_data": my_data["data"],
+                "friend_data": friend_data["data"]
             },
             "user_space_data":{
-                "my_space_data": my_space,
-                "friend_space_data": friend_space
+                "my_space_data": my_space["data"],
+                "friend_space_data": friend_space["data"]
                 },
             "length":{
-                "my_data_len": len(my_data),
-                "my_space_data_len": len(my_space),
-                "friend_data_len": len(friend_data),
-                "friend_space_data_len": len(friend_data)
+                "my_data_len": 1,
+                "my_space_data_len": 1,
+                "friend_data_len": len(friend_data["data"]),
+                "friend_space_data_len": len(friend_space["data"])
             }
         }
     }

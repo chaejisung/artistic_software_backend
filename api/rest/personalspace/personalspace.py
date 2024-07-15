@@ -59,14 +59,17 @@ async def get_personalspace(request:Request,
 async def get_focustime_record(request:Request,
                                  record_time:RecordTime,
                                  user_tasking_time_coll:MongoDBHandler=Depends(get_user_tasking_time_coll)):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
     
-    # 일단 today_tasking_time을 전체로 보기
+    # 종료 시간 - 시작 시간 = 집중 시간
     focus_time = record_time.end_time - record_time.start_time
 
+    # 전체 시간에 위 집중 시간 더하기
     total_time_task = create_task(user_tasking_time_coll.update({"_id", my_id}, {"$inc": {"today_tasking_time.total_time":focus_time}}))
     
+    # 각 작업 종류에 값 넣기
     task_name = record_time.task_name
     filter_query = {
         "_id": my_id,
@@ -74,17 +77,22 @@ async def get_focustime_record(request:Request,
     }
     update_query = {
         "$inc": {
-            f"today_tasking_time.task_specific_time.$[elem].{task_name}": focus_time  # `task_name`의 값을 focus_time만큼 증가, 없므녀 focus_time만큼 삽입
+            f"today_tasking_time.task_specific_time.$[elem].{task_name}": focus_time  # `task_name`의 값을 focus_time만큼 증가, 없으면 focus_time만큼 삽입
         }
     }
-    
     specific_time_task = create_task(user_tasking_time_coll.update(filter=filter_query, update=update_query))
 
     await gather(total_time_task, specific_time_task)
+    
+    # 응답 컨텐츠 생성
     response_content = {
-        "message": "Time Update Success"
+        "message": "Focus time Update Success",
+        "data": {
+            "task_name": task_name,
+            "increase_focus_time": focus_time
+        }
     }
-    return JSONResponse(content=response_content)
+    return JSONResponse(content=response_content, status_code=200)
 
 # add, delete 모두 원래 taskingnote_Coll에도 값 넣어야함, 
 # 이건 상욱이형이 다 짜고 난 후로 미루기
@@ -92,38 +100,37 @@ async def get_focustime_record(request:Request,
 async def post_taskingnote_add(request:Request,
                                tasking_note:TaskingNote,
                                user_coll:MongoDBHandler=Depends(get_user_coll)):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
     task_name = tasking_note.task_name
     
+    # 유저 정보에 작업 데이터 삽입
     await user_coll.update({"_id":my_id}, {"$addToSet": {"tasks": task_name}})
     
+    # 응답 컨텐츠 생성
     response_content = {
-        "message": "Task Update Success"
+        "message": "Task Updated Successfully",
+        "data": task_name
     }
-    return JSONResponse(content=response_content)
-    
+    return JSONResponse(content=response_content, status_code=200)
+
+# add, delete 모두 원래 taskingnote_Coll에도 값 넣어야함, 
+# 이건 상욱이형이 다 짜고 난 후로 미루기
 @sub_app.delete(path="/taskingnote/delete/{task_name}")
 async def delete_taskingnote_delete(request:Request,
                                task_name:str,
                                user_coll:MongoDBHandler=Depends(get_user_coll)):
+    # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
     
+    # 유저 정보내 tasks 배열에서 삭제
     await user_coll.update({"_id": my_id}, {"$pull": {"tasks": task_name}})
     
     response_content = {
-        "message": "Task Delete Success"
+        "message": "Task Deleted Successfully",
+        "data": task_name
     }
     return JSONResponse(content=response_content)
 
-# 이건 각 작업 공간 정보 받아오기
-# @sub_app.get(path="/taskingnote/{task_name}")
-# async def get_taskingnote(request:Request,
-#                           )
-
-
-    
-
-    
-    

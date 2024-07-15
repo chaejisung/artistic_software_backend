@@ -26,14 +26,16 @@ class SessionCheckMiddleware(BaseHTTPMiddleware):
         
         if(session_id):
             session_check = await self.session_coll.select(filter={"_id":session_id}, limit=1)
-
-            if(not session_check):
+            # 존재하지 않으면 404 에러
+            if(not session_check["task_status"]):
                 raise HTTPException(status_code=404)
-            
-            user_id = session_check[0]["identifier"]
+            # 세션 체크에서 가져온 정보
+            session_check_data = session_check["data"]
+            user_id = session_check_data["identifier"]
             user_data = await self.user_coll.select(filter={"_id":user_id}, limit=1)
-            if user_data:
-                request.state.user = user_data[0]
+            
+            if(user_data["task_status"]):
+                request.state.user = user_data["data"]
             else:
                 raise HTTPException(status_code=404)
             

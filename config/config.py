@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     MONGODB_PASSWORD: Optional[str] = None
     MONGODB_DB_NAME: Optional[str] = None
     
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_USER: Optional[str] = None
+    REDIS_PASSWORD: Optional[str] = None
+    REDIS_DB_NUMBER: Optional[int] = None
+    
     URL_ADDRESS: str
     BACKEND_PATH: str
 

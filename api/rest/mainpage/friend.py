@@ -30,7 +30,7 @@ async def post_mainpage_friend_add(request: Request,
     user_id = friend_user.id
     
     # 내 아이디 == 추가하려는 아이디 or 추가하려는 id가 존재하지 않으면 오류
-    if(my_id == user_id or await user_coll.select({"_id":my_id}, {"_id"}, limit=1) == []):
+    if(my_id == user_id or not (await user_coll.select({"_id":my_id}, {"_id"}, limit=1)["task_status"])):
         raise HTTPException(status_code=422)
     
     # 이미 있으면 이미 존재한다고 메시지만 반환
@@ -44,7 +44,7 @@ async def post_mainpage_friend_add(request: Request,
     check_friend_wait = await friend_wait_coll.select({"_id": composite_id})
     
     # 이전 거절된 요청 or 대기중 요청으로부터 일주일이 지나야 재 신청가능
-    if(datetime.now() - check_friend_wait["request_date"] > datetime.timedelta(weeks=1)):
+    if(datetime.now() - check_friend_wait["data"]["request_date"] > datetime.timedelta(weeks=1)):
         await friend_wait_coll.delete({"_id": composite_id})
     
     # 친구요청 대기 컬렉션에 값 삽입
@@ -92,7 +92,8 @@ async def post_mainpage_friend_add(request: Request,
 @sub_app.post(path="/friend/response")
 async def post_mainpage_friend_response(request: Request,
                                         response_friend_req: ResponseFriendReq,
-                                        friend_wait_coll: MongoDBHandler=Depends(get_friend_wait_coll)):
+                                        friend_wait_coll: MongoDBHandler=Depends(get_friend_wait_coll),
+                                        user_coll: MongoDBHandler=Depends(get_user_coll)):
     # 미들웨어에서 넘겨받은 유저 데이터
     my_data = request.state.user
     my_id = my_data.get("_id")
@@ -108,9 +109,11 @@ async def post_mainpage_friend_response(request: Request,
     
     # 수락하면 -> 문서에서 삭제, 친구 리스트에 추가
     else:
-        task = create_task(friend_wait_coll.delete({"_id": composite_id}))
+        friend_wait_coll_task = create_task(friend_wait_coll.delete({"_id": composite_id}))
+        my_coll_task = create_task(user_coll.update({"_id": my_id}, {'$push': {"friend_id": user_id}}))
+        friend_coll_task = create_task(user_coll.update({"_id": user_id}, {'$push': {"friend_id": my_id}}))
         response_message = "Request Accepted"
-        await task
+        await gather(friend_wait_coll_task, my_coll_task, friend_coll_task)
         
     response_content = {
         "message": response_message,
