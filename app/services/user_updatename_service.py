@@ -14,7 +14,7 @@ class UserService:
         return cls.instance
 
     @staticmethod
-    async def update_user_name(self, user_id: str, new_name: str,
+    async def update_user_name(user_id: str, new_name: str,
                                user_coll: MongoDBHandler = get_user_coll()) -> bool:
         try:
             
@@ -31,11 +31,11 @@ class UserService:
             return False
 
     @staticmethod
-    async def update_profile(user_id: str, profile_url: str,
+    async def update_profile(user_id: str, profile_url: bool,
                              user_coll: MongoDBHandler = get_user_coll()):
         update_result = await user_coll.update(
             {"_id": user_id},
-            {"$set": {"profile_url": profile_url}}
+            {"$set": {"show_profile": profile_url}}
         )
 
         return update_result != 0

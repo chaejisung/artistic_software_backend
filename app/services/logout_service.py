@@ -21,18 +21,17 @@ class LogoutService:
         print(request.cookies)
         session_id = request.cookies.get("session_id")
         print("logout2")
-        if not session_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session_id in cookie")
+        # if not session_id:
+        #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session_id in cookie")
         print("logout3")
         # redis, mongoDB에서 세션 조회
         session_data = await self.session_cache.select(session_id)
         print(session_data)
-        if not session_data:
+        if session_data != False:
             session_data = await self.session_coll.select({"_id": session_id})
-            if not session_data:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+        #     if not session_data:
+        #         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
-        user_identifier = session_data.get("identifier")
         print("logout4", session_data)
         # redis와 mongoDB에서 세션 삭제
         await self.session_cache.delete(session_id)
@@ -64,8 +63,7 @@ class LogoutService:
         return {"message": "Logout successful"}
 
     # token 이 none이 나옴
-    def google_logout(self, request: Request):
-        token = request.cookies.get("access_token")
+    def google_logout(self, token):
         if token:
             requests.get(f"https://accounts.google.com/o/oauth2/revoke?token={token}")
         print("googlelogout1")

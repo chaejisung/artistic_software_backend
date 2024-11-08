@@ -5,4 +5,4 @@ class UpdateUserNameRequest(BaseModel):
     new_name: str
 
 class UpdateUserProfileReq(BaseModel):
-    profile_url: str
+    profile_status: bool

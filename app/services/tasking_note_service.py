@@ -37,8 +37,13 @@ class TaskingNoteService(AbsService):
         book_list = await user_space_coll.select({"_id": input.user_id})
         book_list = book_list.get("book_list")
 
-        if(input.note_title in book_list):
-            return None
+        # print("book_list_len", len(book_list))
+        # if(len(book_list) >= 8):
+        #     return None
+        print("book_list   ", book_list)
+        for item in book_list:
+            if item[0] == input.note_title:
+                return None
 
         # tasking note(책) 생성
         note_dict = {
@@ -175,10 +180,10 @@ class TaskingNoteService(AbsService):
         (t1, t2, t3) = await gather(text_update_task, image_update_task, file_update_task)
         await taskingnote_coll.update({"user_id": user_id, "note_title": note_title},
                                       {'$inc': {'page_count': 1}})
-        updated_count = t1+t2+t3
+        # updated_count = t1+t2+t3
 
-        if(updated_count == 0):
-            return None
+        # if(updated_count == 0):
+        #     return None
 
         return WritePageOutputDto(
             user_id=input.user_id,

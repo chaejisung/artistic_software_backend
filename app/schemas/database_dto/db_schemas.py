@@ -20,6 +20,7 @@ class UserColl(BaseModel):
     tag: str
     accessibility: bool = True
     friend_list: Optional[List[str]] = None
+    show_profile: bool = False
 
 # 세션 정보 컬렉션+캐시
 class SessionColl(BaseModel):

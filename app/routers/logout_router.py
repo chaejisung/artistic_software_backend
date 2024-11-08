@@ -10,4 +10,4 @@ async def logout(
     response: Response,
     logout_service: LogoutService = Depends(get_logout_service)
 ):
-    return await logout_service.logout_user(request, response)
+    return await logout_service.logout(request, response)

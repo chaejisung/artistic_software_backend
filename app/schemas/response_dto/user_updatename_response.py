@@ -7,4 +7,4 @@ class UpdateUserNameResponse(BaseModel):
   
 
 class UpdateProfileRes(BaseModel):
-  profile_url: str
+  profile_status: bool

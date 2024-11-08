@@ -61,6 +61,7 @@ async def create_book(request: Request,
         note_color=note_color
     )
     create_note_output: CreateNoteOutputDto = await taskingnote_service.create_note(create_note_input)
+    print("크리에이트", create_note_output)
 
     if(create_note_output is None):
         response.status_code = 204
@@ -169,7 +170,7 @@ async def oepn_book(request: Request,
 async def write_page(request: Request,
                      response: Response,
                       input: WritePageReq,
-                      taskingnote_service: TaskingNoteService = Depends(get_taskingnote_service)) -> UpdateBookRes:
+                      taskingnote_service: TaskingNoteService = Depends(get_taskingnote_service)) -> WritePageRes:
     user_data = await SessionMiddleware.session_check(request)    
 
     user_id = user_data.get("_id")
